@@ -1,0 +1,404 @@
+
+# Time from request to diagnostic procedures to be conducted
+# Time from the MM was requested to conducted
+MM_time_req <- clean_time_diff(data, date_col1="MM1st_date_req",
+                          date_col2 ="MM1st_date_cond", new_col_name = "time_to_MM",
+                                   remove_negatives = TRUE,
+                                   remove_outliers = F)
+
+# Time from the US was requested to conducted
+US_time_req <- clean_time_diff(data, date_col1="US1st_date_req",
+                               date_col2 ="US1st_date_cond", new_col_name = "time_to_US",
+                               remove_negatives = TRUE,
+                               remove_outliers = F)
+
+# Time from the MRI was requested to conducted
+MRI_time_req <- clean_time_diff(data, date_col1="MRI1st_date_req",
+                               date_col2 ="MRI1st_date_cond", new_col_name = "time_to_MRI",
+                               remove_negatives = TRUE,
+                               remove_outliers = F)
+
+# Time from the Biopsy was requested to conducted
+Biopsy_time_req <- clean_time_diff(data, date_col1="Biopsy1st_date_req",
+                               date_col2 ="Biopsy1st_date_cond", new_col_name = "time_to_Biopsy",
+                               remove_negatives = TRUE,
+                               remove_outliers = F)
+
+# Time from the Xray was requested to conducted
+Xray_time_req <- clean_time_diff(data, date_col1="Xray1st_date_req",
+                               date_col2 ="Xray1st_date_cond", new_col_name = "time_to_Xray",
+                               remove_negatives = TRUE,
+                               remove_outliers = F)
+
+# Time from the CT was requested to conducted
+CT_time_req <- clean_time_diff(data, date_col1="CT1st_date_req",
+                                 date_col2 ="CT1st_date_cond", new_col_name = "time_to_CT",
+                                 remove_negatives = TRUE,
+                                 remove_outliers = F)
+
+# Combined time to diagnostic procedures
+Time_to_procedures <- cbind(MM_time_req, US_time_req, MRI_time_req, Biopsy_time_req,
+                            Xray_time_req, CT_time_req)
+
+# Analyse and visualize time to procedures
+# Apply to your data
+results <- analyze_procedure_times(Time_to_procedures)
+
+# View the summary table
+print(results$summary_table)
+
+# View the boxplot
+print(results$boxplot)
+
+# Save the results
+write.csv(results$summary_table, "procedure_time_stats.csv")
+ggsave("procedure_times_boxplot.png", plot = results$boxplot)
+
+# test positivity calculation
+
+# For MM
+MM_pos = sum(data[,"MM1st_positivity"] == "positive", na.rm = TRUE)
+MM_neg = sum(data[,"MM1st_positivity"] == "negative", na.rm = TRUE)
+MM_positivity = MM_pos/(MM_pos+MM_neg)
+
+# False negative for MM
+FN_MM = sum(
+  data[,"MM1st_positivity"] == "negative" &
+    data[,"Biopsy1st_positivity"] == "positive" &
+    !is.na(data[,"MM1st_positivity"]) &
+    !is.na(data[,"Biopsy1st_positivity"])
+)/MM_pos
+
+# For US
+US_pos = sum(data[,"US1st_positivity"] == "positive", na.rm = TRUE)
+US_neg = sum(data[,"US1st_positivity"] == "negative", na.rm = TRUE)
+US_positivity = US_pos/(US_pos + US_neg)
+
+# False negative for US
+FN_US = sum(
+  data[,"US1st_positivity"] == "negative" &
+    data[,"Biopsy1st_positivity"] == "positive" &
+    !is.na(data[,"US1st_positivity"]) &
+    !is.na(data[,"Biopsy1st_positivity"])
+)/US_pos
+
+# For MRI
+MRI_pos = sum(data[,"MRI1st_positivity"] == "positive", na.rm = TRUE)
+MRI_neg = sum(data[,"MRI1st_positivity"] == "negative", na.rm = TRUE)
+MRI_positivity = MRI_pos/(MRI_pos+MRI_neg)
+
+# False negative for MRI
+FN_MRI = sum(
+  data[,"MRI1st_positivity"] == "negative" &
+    data[,"Biopsy1st_positivity"] == "positive" &
+    !is.na(data[,"MRI1st_positivity"]) &
+    !is.na(data[,"Biopsy1st_positivity"])
+)/MRI_pos
+
+# For Biopsy
+Biopsy_pos = sum(data[,"Biopsy1st_positivity"] == "positive", na.rm = TRUE)
+Biopsy_neg = sum(data[,"Biopsy1st_positivity"] == "negative", na.rm = TRUE)
+Biopsy_positivity = Biopsy_pos/(Biopsy_pos+Biopsy_neg)
+
+# type of biopsy
+Biopsy_CORE = sum(data[,"Biopsy_type"] == "CORE", na.rm = TRUE)
+Biopsy_surg = sum(data[,"Biopsy_type"] == "Surgical biopsy", na.rm = TRUE)
+Biopsy_other = sum(data[,"Biopsy_type"] == "Other/NA", na.rm = TRUE)
+
+Biopsy_CORE/(Biopsy_CORE+Biopsy_surg+Biopsy_other)
+Biopsy_surg/(Biopsy_CORE+Biopsy_surg+Biopsy_other)
+
+
+# For Xray
+Xray_pos = sum(data[,"Xray1st_positivity"] == "positive", na.rm = TRUE)
+Xray_neg = sum(data[,"Xray1st_positivity"] == "negative", na.rm = TRUE)
+Xray_positivity = Xray_pos/(Xray_pos+Xray_neg)
+
+# Xray positivity for early cancers (stage 1,2)
+# Proportion of early cancers that are positive at Xray (can we assume they have metastasis?)
+Xray_pos_early = sum(
+  data[,"Xray1st_positivity"] == "positive" &
+    (data[,"Stage_diagnosis"] == 1| data[,"Stage_diagnosis"] == 2) &
+    !is.na(data[,"Xray1st_positivity"]) &
+    !is.na(data[,"Stage_diagnosis"]))/sum((data[,"Stage_diagnosis"] == 1| data[,"Stage_diagnosis"] == 2) &
+       !is.na(data[,"Stage_diagnosis"]))
+
+# Xray positivity for early cancers (stage 3,4)
+# Proportion of late cancers that are positive at Xray (can we assume they have metastasis?)
+Xray_pos_late = sum(
+  data[,"Xray1st_positivity"] == "positive" &
+    (data[,"Stage_diagnosis"] == 3| data[,"Stage_diagnosis"] == 4) &
+    !is.na(data[,"Xray1st_positivity"]) &
+    !is.na(data[,"Stage_diagnosis"]))/sum((data[,"Stage_diagnosis"] == 3| data[,"Stage_diagnosis"] == 4) &
+                                            !is.na(data[,"Stage_diagnosis"]))
+
+
+# For CT
+CT_pos = sum(data[,"CT1st_positivity"] == "positive", na.rm = TRUE)
+CT_neg = sum(data[,"CT1st_positivity"] == "negative", na.rm = TRUE)
+CT_positivity = CT_pos/(CT_pos+CT_neg)
+
+# CT positivity for early cancers (stage 1,2)
+# Proportion of early cancers that are positive at CT (can we assume they have metastasis?)
+CT_pos_early = sum(
+  data[,"CT1st_positivity"] == "positive" &
+    (data[,"Stage_diagnosis"] == 1| data[,"Stage_diagnosis"] == 2) &
+    !is.na(data[,"CT1st_positivity"]) &
+    !is.na(data[,"Stage_diagnosis"]))/sum((data[,"Stage_diagnosis"] == 1| data[,"Stage_diagnosis"] == 2) &
+                                            !is.na(data[,"Stage_diagnosis"]))
+
+# CT positivity for early cancers (stage 3,4)
+# Proportion of late cancers that are positive at CT (can we assume they have metastasis?)
+CT_pos_late = sum(
+  data[,"CT1st_positivity"] == "positive" &
+    (data[,"Stage_diagnosis"] == 3| data[,"Stage_diagnosis"] == 4) &
+    !is.na(data[,"CT1st_positivity"]) &
+    !is.na(data[,"Stage_diagnosis"]))/sum((data[,"Stage_diagnosis"] == 3| data[,"Stage_diagnosis"] == 4) &
+                                            !is.na(data[,"Stage_diagnosis"]))
+
+
+# Get counts
+n_MM <- MM_pos + MM_neg
+n_US <- US_pos + US_neg
+n_MRI <- MRI_pos + MRI_neg
+n_Biopsy <- Biopsy_pos + Biopsy_neg
+n_Xray <- Xray_pos + Xray_neg
+n_CT <- CT_pos + CT_neg
+
+n_early <- sum(data$Stage_diagnosis %in% c(1, 2), na.rm = TRUE)
+n_late <- sum(data$Stage_diagnosis %in% c(3, 4), na.rm = TRUE)
+
+# Compile all stats
+results <- rbind(
+  MM_positivity = f.CI.beta(MM_pos, n_MM),
+  US_positivity = f.CI.beta(US_pos, n_US),
+  MRI_positivity = f.CI.beta(MRI_pos, n_MRI),
+  FN_MM = f.CI.beta(FN_MM, n_MM),
+  FN_US = f.CI.beta(FN_US, n_US),
+  FN_MRI = f.CI.beta(FN_MRI, n_MRI),
+  Biopsy_positivity = f.CI.beta(Biopsy_pos, n_Biopsy),
+  Xray_positivity = f.CI.beta(Xray_pos, n_Xray),
+  CT_positivity = f.CI.beta(CT_pos, n_CT),
+  Xray_pos_early = f.CI.beta(
+    sum(data$Xray1st_positivity == "positive" & data$Stage_diagnosis %in% c(1,2), na.rm = TRUE),
+    n_early
+  ),
+  Xray_pos_late = f.CI.beta(
+    sum(data$Xray1st_positivity == "positive" & data$Stage_diagnosis %in% c(3,4), na.rm = TRUE),
+    n_late
+  ),
+  CT_pos_early = f.CI.beta(
+    sum(data$CT1st_positivity == "positive" & data$Stage_diagnosis %in% c(1,2), na.rm = TRUE),
+    n_early
+  ),
+  CT_pos_late = f.CI.beta(
+    sum(data$CT1st_positivity == "positive" & data$Stage_diagnosis %in% c(3,4), na.rm = TRUE),
+    n_late
+  )
+)
+
+# Convert to data frame
+results_diag.positivity <- as.data.frame(results)
+results_diag.positivity$Measure <- rownames(results_diag.positivity)
+rownames(results_diag.positivity) <- NULL
+
+# Save to CSV
+write.csv(results_diag.positivity, "diag_positivity_stats_results.csv", row.names = FALSE)
+
+
+# Number of procedures received
+# Number of MM received
+plot_categorical_var(data, N_repeat_MM, xlab="Number of MM received")
+plot_categorical_var(data, N_repeat_US, xlab="Number of US received")
+plot_categorical_var(data, N_repeat_MRI, xlab="Number of MRI received")
+plot_categorical_var(data, N_repeat_biopsy, xlab="Number of biopsy received")
+plot_categorical_var(data, N_repeat_Xray, xlab="Number of Xray received")
+plot_categorical_var(data, N_repeat_CT, xlab="Number of CT received")
+
+# high resource use patients
+
+data <- data %>%
+  mutate(
+    procedures_used = rowSums(!is.na(select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT)) &
+                                select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT) > 0),
+
+    procedure_category = case_when(
+      procedures_used == 1 ~ "1 procedure",
+      procedures_used == 2 ~ "2 procedures",
+      procedures_used == 3 ~ "3 procedures",
+      procedures_used == 4 ~ "4 procedures",
+      procedures_used >= 5 ~ "5+ procedures",
+      TRUE ~ "None"
+    )
+  )
+
+summary_df <- data %>%
+  count(procedure_category) %>%
+  mutate(percentage = round(100 * n / sum(n), 1))
+
+ggplot(summary_df, aes(x = procedure_category, y = percentage, fill = procedure_category)) +
+  geom_col(show.legend = FALSE, width = 0.7) +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), vjust = -0.5, size = 4) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.1))) +
+  labs(
+    title = "Distribution of Patients by Number of Procedures Received",
+    x = "Number of Procedures",
+    y = "Percentage of Patients"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+  )
+
+# Patients with more than 4 procedures
+
+data <- data %>%
+  mutate(
+    procedures_used = rowSums(!is.na(select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT)) &
+                                select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT) > 0),
+    proc_group = if_else(procedures_used >= 4, "4 or more procedures", "Fewer than 4 procedures")
+  )
+
+# Summary stats for age at diagnosis
+age_summary <- data %>%
+  group_by(proc_group) %>%
+  summarise(
+    mean_age = mean(Age_at_diagnosis, na.rm = TRUE),
+    sd_age = sd(Age_at_diagnosis, na.rm = TRUE),
+    median_age = median(Age_at_diagnosis, na.rm = TRUE),
+    n = n()
+  )
+
+print(age_summary)
+
+# split by no/low use
+data <- data %>%
+  mutate(
+    procedures_used = rowSums(!is.na(select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT)) &
+                                select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT) > 0),
+    proc_group = if_else(procedures_used >1, "2 or more procedures", "Fewer than 2 procedures")
+  )
+
+# Summary stats for age at diagnosis
+age_summary <- data %>%
+  group_by(proc_group) %>%
+  summarise(
+    mean_age = mean(Age_at_diagnosis, na.rm = TRUE),
+    sd_age = sd(Age_at_diagnosis, na.rm = TRUE),
+    median_age = median(Age_at_diagnosis, na.rm = TRUE),
+    n = n()
+  )
+
+print(age_summary)
+
+data <- data %>%
+  mutate(
+    procedures_used = rowSums(!is.na(select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT)) &
+                                select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT) > 0),
+    proc_group = case_when(
+      procedures_used < 2 ~ "< 2 procedures",
+      procedures_used >= 2 & procedures_used <= 3 ~ "2-3 procedures",
+      procedures_used >= 4 ~ "4 or more procedures"
+    )
+  )
+
+# Summary stats for age at diagnosis
+age_summary <- data %>%
+  group_by(proc_group) %>%
+  summarise(
+    mean_age = mean(Age_at_diagnosis, na.rm = TRUE),
+    sd_age = sd(Age_at_diagnosis, na.rm = TRUE),
+    median_age = median(Age_at_diagnosis, na.rm = TRUE),
+    n = n()
+  )
+print(age_summary)
+
+
+# Calculate summary with mean, sd, n, and 95% CI for age by proc_group
+age_summary <- data %>%
+  group_by(proc_group) %>%
+  summarise(
+    mean_age = mean(Age_at_diagnosis, na.rm = TRUE),
+    sd_age = sd(Age_at_diagnosis, na.rm = TRUE),
+    n = sum(!is.na(Age_at_diagnosis)),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    se = sd_age / sqrt(n),
+    ci_lower = mean_age - qt(0.975, df = n - 1) * se,
+    ci_upper = mean_age + qt(0.975, df = n - 1) * se
+  )
+
+# Plot
+ggplot(age_summary, aes(x = proc_group, y = mean_age, fill = proc_group)) +
+  geom_col(width = 0.6) +
+  geom_errorbar(aes(ymin = ci_lower, ymax = ci_upper), width = 0.2) +
+  geom_text(aes(label = round(mean_age,2)), vjust = -2.5) +
+  labs(
+    x = "Procedure Use Group",
+    y = "Mean Age at Diagnosis"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+# Stage distribution by group
+data <- data %>%
+  mutate(
+    Stage_group = case_when(
+      Stage_diagnosis %in% c(1, 2) ~ "Stage 1-2",
+      Stage_diagnosis %in% c(3, 4) ~ "Stage 3-4",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+
+# Stage distribution by group with combined stages
+# 1. Create 'stage_group' and 'proc_group' in data
+data <- data %>%
+  mutate(
+    stage_group = case_when(
+      Stage_diagnosis %in% c(1, 2) ~ "Early stage",
+      Stage_diagnosis %in% c(3, 4) ~ "Late stage",
+      TRUE ~ NA_character_
+    ),
+    procedures_used = rowSums(!is.na(select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT)) &
+                                select(., N_repeat_MM, N_repeat_US, N_repeat_MRI, N_repeat_Xray, N_repeat_CT) > 0),
+    proc_group = case_when(
+      procedures_used < 2 ~ "< 2 procedures",
+      procedures_used >= 2 & procedures_used <= 3 ~ "2-3 procedures",
+      procedures_used >= 4 ~ "4 or more procedures",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(stage_group) & !is.na(proc_group))
+
+# 2. Calculate proportions and 95% CI within each stage_group
+prop_summary <- data %>%
+  group_by(stage_group, proc_group) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(stage_group) %>%
+  mutate(
+    total = sum(count),
+    proportion = count / total,
+    proportion_percent = proportion * 100,
+    ci_lower = pmax(0, proportion - 1.96 * sqrt(proportion * (1 - proportion) / total)),
+    ci_upper = pmin(1, proportion + 1.96 * sqrt(proportion * (1 - proportion) / total)),
+    ci_lower_percent = ci_lower * 100,
+    ci_upper_percent = ci_upper * 100
+  )
+
+# 3. Plot side-by-side bar chart with error bars
+ggplot(prop_summary, aes(x = proc_group, y = proportion_percent, fill = proc_group)) +
+  geom_col() +
+  geom_errorbar(aes(ymin = ci_lower_percent, ymax = ci_upper_percent), width = 0.2) +
+  facet_wrap(~stage_group) +
+  geom_text(aes(label = paste0(round(proportion_percent, 1), "%")), vjust = -2.5) +
+  labs(
+    x = "Number of Procedures",
+    y = "Proportion (%)"
+  ) +
+  ylim(0, 100) +
+  theme_minimal() +
+  theme(legend.position = "none")

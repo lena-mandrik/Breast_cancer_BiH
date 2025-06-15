@@ -1,0 +1,358 @@
+# Script for evaluating treatment performance
+
+# 1. Calculate time to surgery (Date_surgery_request - Date_surgery)
+
+# Create new time variable and pivot data
+delay_data <- data %>%
+  mutate(
+    time_syrgery = as.numeric(as.Date(Date_surgery) - as.Date(Date_surgery_request)),
+    time_radio = as.numeric(as.Date(Date_1st_radio_cycle) - as.Date(Date_radio_request)),
+    time_chemo = as.numeric(as.Date(Date_1st_chemo_cycle) - as.Date(Date_chemo_request)),
+  ) %>%
+  select(N, Residency_group, Age_diagnosis, Stage_group, time_syrgery, time_radio, time_chemo) %>%
+  pivot_longer(
+    cols = starts_with("time"),
+    names_to = "delay_stage",
+    values_to = "delay_days"
+  ) %>%
+  filter(!is.na(delay_days))  # Remove rows where delay couldn't be calculated
+
+# results in illogical values, need to be excluded first
+# Summary data for means and CIs
+delay_data_summary <- delay_data %>%
+  group_by(delay_stage) %>%
+  summarise(
+    mean = mean(delay_days, na.rm = TRUE),
+    ci_low = mean(delay_days, na.rm = TRUE) - 1.96 * sd(delay_days, na.rm = TRUE) / sqrt(n()),
+    ci_high = mean(delay_days, na.rm = TRUE) + 1.96 * sd(delay_days, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# Scatterplot with jitter for visibility + mean and CI
+ggplot() +
+  # Scatter plot for all points
+  geom_jitter(data = delay_data, aes(x = delay_stage, y = delay_days), width = 0.2, alpha = 0.4, color = "grey40") +
+  # Mean points
+  geom_point(data = delay_data_summary, aes(x = delay_stage, y = mean), color = "blue", size = 3) +
+  # Error bars from summary data (CI)
+  geom_errorbar(
+    data = delay_data_summary,
+    aes(x = delay_stage, ymin = ci_low, ymax = ci_high),
+    width = 0.2,
+    color = "blue"
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Time Delays in Care Pathway",
+    x = "Delay Stage",
+    y = "Days"
+  ) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+###################################################
+# Repeat the analysis of the delay times but only for those who were diagnosed through primary care pathways
+# Clean the illogical values
+# use IQR method for this
+# also ignore the negative time values
+
+# Clean datasets
+# Calculate summary stats with mean and CI by delay_stage group
+delay_treat_stage_summary <- delay_treat.stage %>%
+  group_by(delay_stage) %>%
+  summarise(
+    mean = mean(delay_days, na.rm = TRUE),
+    sd = sd(delay_days, na.rm = TRUE),
+    n = n(),
+    ci_low = mean - 1.96 * sd / sqrt(n),
+    ci_high = mean + 1.96 * sd / sqrt(n),
+    .groups = "drop"
+  )
+
+# Plot
+ggplot() +
+  geom_jitter(data = delay_treat.stage, aes(x = delay_stage, y = delay_days),
+              width = 0.2, alpha = 0.4, color = "grey40") +
+  geom_point(data = delay_treat_stage_summary, aes(x = delay_stage, y = mean), color = "blue", size = 3) +
+  geom_errorbar(data = delay_treat_stage_summary, aes(x = delay_stage, ymin = ci_low, ymax = ci_high),
+                width = 0.2, color = "blue") +
+  theme_minimal() +
+  labs(
+    title = "Time Delays in Care Pathway (Cleaned by Group)",
+    x = "Delay Stage",
+    y = "Days"
+  ) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+# Ungouped
+
+data_treatment_clean <- remove_iqr_outliers(delay_data, "delay_days")
+# Calculate overall summary stats
+# ANy treatment delay
+overall_summary <- data_treatment_clean %>%
+  summarise(
+    mean = mean(delay_days, na.rm = TRUE),
+    sd = sd(delay_days, na.rm = TRUE),
+    n = n(),
+    ci_low = mean - 1.96 * sd / sqrt(n),
+    ci_high = mean + 1.96 * sd / sqrt(n)
+  )
+
+# Plot histogram + mean and CI lines
+ggplot(data_treatment_clean, aes(x = delay_days)) +
+  geom_histogram(binwidth = 5, fill = "grey70", color = "black", alpha = 0.7) +
+  geom_vline(xintercept = overall_summary$mean, color = "blue", size = 1) +
+  geom_vline(xintercept = overall_summary$ci_low, color = "blue", linetype = "dashed") +
+  geom_vline(xintercept = overall_summary$ci_high, color = "blue", linetype = "dashed") +
+  theme_minimal() +
+  labs(
+    title = "Distribution of Time Delays (Cleaned Data)",
+    x = "Delay Days",
+    y = "Count"
+  )
+
+######################
+## Type of surgery received
+#
+
+# Radical Mastectomy
+Surg_radical = sum(
+  data[,"Type_surgery"] == "radical mastectomy" &
+    !is.na(data[,"Type_surgery"]))
+
+# Sparing
+Surg_sparing = sum(
+  data[,"Type_surgery"] == "Sparing mastectomy" &
+    !is.na(data[,"Type_surgery"]))
+
+Surg_n = Surg_radical + Surg_sparing
+Surg_radical_p <- Surg_radical/Surg_n
+Surg_sparing_p <- Surg_sparing/Surg_n
+
+
+# Surgery by stage
+# For early cancers
+Surg_radical_1.2 = sum(
+  data[,"Type_surgery"] == "radical mastectomy" & (data[,"Stage_diagnosis"] == 1 |data[,"Stage_diagnosis"] == 2) &
+    !is.na(data[,"Type_surgery"])& !is.na(data[,"Stage_diagnosis"]))
+
+# Sparing
+Surg_sparing_1.2 = sum(
+  data[,"Type_surgery"] == "Sparing mastectomy" & (data[,"Stage_diagnosis"] == 1 |data[,"Stage_diagnosis"] == 2) &
+    !is.na(data[,"Type_surgery"]) & !is.na(data[,"Stage_diagnosis"]))
+
+Surg_n.1.2 = Surg_radical_1.2 + Surg_sparing_1.2
+Surg_radical_1.2_p <- Surg_radical_1.2/Surg_n.1.2
+Surg_sparing_1.2_p <- Surg_sparing_1.2/Surg_n.1.2
+
+
+# For late cancers
+Surg_radical_3.4 = sum(
+  data[,"Type_surgery"] == "radical mastectomy" & (data[,"Stage_diagnosis"] == 3|data[,"Stage_diagnosis"] == 4) &
+    !is.na(data[,"Type_surgery"])& !is.na(data[,"Stage_diagnosis"]))
+
+# Sparing
+Surg_sparing_3.4 = sum(
+  data[,"Type_surgery"] == "Sparing mastectomy" & (data[,"Stage_diagnosis"] == 3 |data[,"Stage_diagnosis"] == 4) &
+    !is.na(data[,"Type_surgery"]) & !is.na(data[,"Stage_diagnosis"]))
+
+Surg_n.3.4 = Surg_radical_3.4 + Surg_sparing_3.4
+Surg_radical_3.4_p <- Surg_radical_3.4/Surg_n.3.4
+Surg_sparing_3.4_p <- Surg_sparing_3.4/Surg_n.3.4
+
+
+##By age
+#for under 55
+Surg_radical_u.55 = sum(
+  data[,"Type_surgery"] == "radical mastectomy" & (data[,"Age_at_diagnosis"] <=55) &
+    !is.na(data[,"Type_surgery"])& !is.na(data[,"Age_at_diagnosis"]))
+
+# Sparing
+Surg_sparing_u.55 = sum(
+  data[,"Type_surgery"] == "Sparing mastectomy" & (data[,"Age_at_diagnosis"] <=55) &
+    !is.na(data[,"Type_surgery"]) & !is.na(data[,"Age_at_diagnosis"]))
+
+Surg_n.u.55 = Surg_radical_u.55 + Surg_sparing_u.55
+Surg_radical_u.55_p <- Surg_radical_u.55/Surg_n.u.55
+Surg_sparing_u.55_p <- Surg_sparing_u.55/Surg_n.u.55
+
+# for after 55
+Surg_radical_a.55 = sum(
+  data[,"Type_surgery"] == "radical mastectomy" & (data[,"Age_at_diagnosis"] >55) &
+    !is.na(data[,"Type_surgery"])& !is.na(data[,"Age_at_diagnosis"]))
+
+# Sparing
+Surg_sparing_a.55 = sum(
+  data[,"Type_surgery"] == "Sparing mastectomy" & (data[,"Age_at_diagnosis"] >55) &
+    !is.na(data[,"Type_surgery"]) & !is.na(data[,"Age_at_diagnosis"]))
+
+Surg_n.a.55 = Surg_radical_a.55 + Surg_sparing_a.55
+Surg_radical_a.55_p <- Surg_radical_a.55/Surg_n.a.55
+Surg_sparing_a.55_p <- Surg_sparing_a.55/Surg_n.a.55
+
+# No difference by age
+# save treatment results
+
+# Compile all stats
+results.treat <- rbind(
+  Surg_radical = f.CI.beta(Surg_radical, Surg_n),
+  Surg_sparing = f.CI.beta(Surg_sparing, Surg_n),
+  Surg_radical_1.2 =f.CI.beta(Surg_radical_1.2,Surg_n.1.2),
+  Surg_sparing_1.2 =f.CI.beta(Surg_sparing_1.2,Surg_n.1.2),
+  Surg_radical_3.4 =f.CI.beta(Surg_radical_3.4,Surg_n.3.4),
+  Surg_sparing_3.4 =f.CI.beta(Surg_sparing_3.4,Surg_n.3.4)
+)
+
+# Convert to data frame
+results_treat <- as.data.frame(results.treat)
+results_treat$Measure <- rownames(results_treat)
+rownames(results_treat) <- NULL
+
+# Save to CSV
+write.csv(results_treat, "results_treat.csv", row.names = FALSE)
+
+#test whether proportion of women with radical mastectomy is statistical different in early vs late stage
+# Number of radical mastectomies in stage 1–2 and stage 3–4
+x <- c(Surg_radical_1.2, Surg_radical_3.4)
+# Total number of patients in each group
+n <- c(Surg_n.1.2, Surg_n.3.4)
+# Perform two-proportion z-test
+prop.test(x, n, correct = FALSE)  # Set correct = TRUE to apply continuity correction
+
+
+##############################################################
+######################################
+# Number of cycles of therapy received
+# To calculate, consider whether it passed more than 60 days between
+# the Date_last_visit and the Date_last_chemo_cycle
+data$Date_last_visit <- as.Date(data$Date_last_visit)
+
+# for chemotherapy
+data_chemo <- data %>%
+  ## Make sure all three date columns are Date objects.
+  mutate(
+    Date_1st_chemo_cycle  = as.Date(Date_1st_chemo_cycle),   # add `format =` if needed
+    Date_last_chemo_cycle = as.Date(Date_last_chemo_cycle),
+    Date_last_visit       = as.Date(data$Date_last_visit, format = "%d %B %Y")
+
+  ) %>%
+  ## Calculate the gap (in days) between the last chemo cycle
+  mutate(
+    time_chemo_visit = as.numeric(Date_last_visit - Date_last_chemo_cycle),
+    chemo_received = (N_chemo_cycl_prescr == N_chemo_cycl_received)
+
+  ) %>%
+  ## Keep only rows that satisfy all criteria:
+  filter(
+    !is.na(Date_1st_chemo_cycle),        # had 1st chemo recorded
+    !is.na(Date_last_chemo_cycle),       # had last chemo recorded
+    !is.na(time_chemo_visit),            # difference successfully computed
+    !is.na(chemo_received),            # difference successfully computed
+    time_chemo_visit >= 60               # chemo finished ≥ 60 days before last visit
+  )
+
+# Duration in chemotherapy in months
+data_chemo$duration_chemo_months <- interval(
+  ymd(data_chemo$Date_1st_chemo_cycle),
+  ymd(data_chemo$Date_last_chemo_cycle)
+) %/% months(1)
+
+# remove negative
+duration_chemo_months  <- data_chemo$duration_chemo_months[data_chemo$duration_chemo_months >= 0]
+hist(duration_chemo_months, breaks = 20, main = "Chemo Duration (months)", xlab = "Months")
+median_months <- median(duration_chemo_months, na.rm = TRUE)
+iqr_months <- IQR(duration_chemo_months, na.rm = TRUE)
+cat("Median:", median_months, "\nIQR:", iqr_months)
+
+# stat for duration of chemo in months
+
+# duration of months for which chemo was received
+duration_chemo_months =get_stats(duration_chemo_months, data_chemo)
+# Proportion of patients who recieved the number of cycles as prescribed
+chemo_received =get_stats(chemo_received, data_chemo)
+
+###############
+# For radiotherapy
+
+data_radio <- data %>%
+  ## Make sure all three date columns are Date objects.
+  mutate(
+    Date_1st_radio_cycle  = as.Date(Date_1st_radio_cycle),   # add `format =` if needed
+    Date_last_radio_cycle = as.Date(Date_last_radio_cycle),
+    Date_last_visit       = as.Date(data$Date_last_visit, format = "%d %B %Y")
+
+  ) %>%
+  ## Calculate the gap (in days) between the last radio cycle
+  mutate(
+    time_radio_visit = as.numeric(Date_last_visit - Date_last_radio_cycle),
+    radio_received = (N_radio_cycl_prescr == N_radio_cycl_received)
+
+  ) %>%
+  ## Keep only rows that satisfy all criteria:
+  filter(
+    !is.na(Date_1st_radio_cycle),        # had 1st radio recorded
+    !is.na(Date_last_radio_cycle),       # had last radio recorded
+    !is.na(time_radio_visit),            # difference successfully computed
+    !is.na(radio_received),            # difference successfully computed
+    time_radio_visit >= 60               # radio finished ≥ 60 days before last visit
+  )
+
+# Duration in radiotherapy in months
+data_radio$duration_radio_months <- interval(
+  ymd(data_radio$Date_1st_radio_cycle),
+  ymd(data_radio$Date_last_radio_cycle)
+) %/% months(1)
+
+# remove negative
+duration_radio_months  <- data_radio$duration_radio_months[data_radio$duration_radio_months >= 0]
+hist(duration_radio_months, breaks = 20, main = "radio Duration (months)", xlab = "Months")
+median_months <- median(duration_radio_months, na.rm = TRUE)
+iqr_months <- IQR(duration_radio_months, na.rm = TRUE)
+cat("Median:", median_months, "\nIQR:", iqr_months)
+
+# stat for duration of radio in months
+
+# duration of months for which radio was received
+duration_radio_months =get_stats(duration_radio_months, data_radio)
+# Proportion of patients who recieved the number of cycles as prescribed
+radio_received =get_stats(radio_received, data_radio)
+
+# bind the results together
+duration_chemo_months <- as.data.frame(t(duration_chemo_months))
+duration_radio_months <- as.data.frame(t(duration_radio_months))
+
+chemo_received <- as.data.frame(t(chemo_received))
+radio_received <- as.data.frame(t(radio_received))
+
+# Bind them
+result_treatment_duration <- cbind(duration_chemo_months, duration_radio_months)
+colnames(result_treatment_duration) <- c("duration chemo, months", "duration radio, months")
+
+trt_compliance <- cbind(chemo_received, radio_received)
+colnames(trt_compliance) <- c("chemo non-compl", "chemo compl", "radio non-compl", "radio compliance")
+
+
+write.csv(result_treatment_duration, "result_treatment_duration.csv", row.names = T)
+write.csv(trt_compliance, "trt_compliance.csv", row.names = T)
+
+###############################################
+## Duration of hormonal therapy in months
+
+# all patients
+duration_hormon =get_stats(Duration_hormon, data) #duration of hormonal therapy for all patients on hormones
+Hormon_free =get_stats(Hormon_free, data) #whether they get them for free
+duration_target =get_stats(Duration_target, data) #duration of target therapy for all patients on hormones
+N_target_units =get_stats(N_target_received, data) #whether they get them for free
+N_target_paid =get_stats(N_target_paid, data) #whether they get them for free
+
+duration_h.t <- rbind(duration_hormon, duration_target)
+rownames(duration_h.t) <- c("duration_hormon", "duration_target")
+write.csv(duration_h.t, "duration_h.t.csv", row.names = T)
+
+
+# calculate who get target for free and paid
+n_free <- sum(data$N_target_paid == 0, na.rm = TRUE)
+n_paid <- sum(data$N_target_paid > 0, na.rm = TRUE)
+units_paid <- data$N_target_paid[data$N_target_paid > 0]
+(summary_units_paid <- summary(units_paid))
+# p of those who paid for at least 1 unit
+(n_paid/(n_paid+ n_free))

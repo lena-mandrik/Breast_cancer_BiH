@@ -1,0 +1,236 @@
+##################################################################
+##### Compare delay times in care pathway
+
+# Create new time variable and pivot data
+delay_data <- data %>%
+  mutate(
+    time_sympt_to_diag = as.numeric(as.Date(Date_diagnosis) - as.Date(Date_1st_sympt)),
+    time_sympt_to_ref = as.numeric(as.Date(Date_1st_refer) - as.Date(Date_1st_sympt)),
+    time_ref_to_gp_ref = as.numeric(as.Date(Date_GP_ref_CCUoS) - as.Date(Date_1st_refer)),
+    time_gp_ref_to_admit = as.numeric(as.Date(Date_1st_admission) - as.Date(Date_GP_ref_CCUoS))
+  ) %>%
+  select(N, Residency_group, time_sympt_to_diag, time_sympt_to_ref, time_ref_to_gp_ref, time_gp_ref_to_admit) %>%
+  pivot_longer(
+    cols = starts_with("time"),
+    names_to = "delay_stage",
+    values_to = "delay_days"
+  ) %>%
+  filter(!is.na(delay_days))  # Remove rows where delay couldn't be calculated
+
+########################################
+## Here illogical values are not replaced yet
+###########################################
+
+
+# Recode the delay_stage variable for more readable labels
+delay_data$delay_stage <- recode(delay_data$delay_stage,
+                                 time_sympt_to_diag = "Symptoms to Diagnosis",
+                                 time_sympt_to_ref = "Symptoms to First Referral",
+                                 time_ref_to_gp_ref = "Referral to GP Referral",
+                                 time_gp_ref_to_admit = "GP Referral to Admission")
+
+# Make sure delay_stage is a factor with a specific order for the plot
+delay_data$delay_stage <- factor(delay_data$delay_stage,
+                                 levels = c("Symptoms to First Referral",
+                                            "Referral to GP Referral",  # corrected
+                                            "GP Referral to Admission",
+                                            "Symptoms to Diagnosis")
+)
+
+# Summary data for means and CIs
+delay_data_summary <- delay_data %>%
+  group_by(delay_stage) %>%
+  summarise(
+    mean = mean(delay_days, na.rm = TRUE),
+    ci_low = mean(delay_days, na.rm = TRUE) - 1.96 * sd(delay_days, na.rm = TRUE) / sqrt(n()),
+    ci_high = mean(delay_days, na.rm = TRUE) + 1.96 * sd(delay_days, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# Scatterplot with jitter for visibility + mean and CI
+ggplot() +
+  # Scatter plot for all points
+  geom_jitter(data = delay_data, aes(x = delay_stage, y = delay_days), width = 0.2, alpha = 0.4, color = "grey40") +
+  # Mean points
+  geom_point(data = delay_data_summary, aes(x = delay_stage, y = mean), color = "blue", size = 3) +
+  # Error bars from summary data (CI)
+  geom_errorbar(
+    data = delay_data_summary,
+    aes(x = delay_stage, ymin = ci_low, ymax = ci_high),
+    width = 0.2,
+    color = "blue"
+  ) +
+  theme_minimal() +
+  labs(
+    title = "Time Delays in Care Pathway",
+    x = "Delay Stage",
+    y = "Days"
+  ) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+###################################################
+# Repeat the analysis of the delay times but only for those who were diagnosed through primary care pathways
+# Clean the illogical values
+# use IQR method for this
+# also ignore the negative time values
+
+# Clean both datasets
+delay_primary <- clean_delay_data(data, "Primary care (public)")
+delay_secondary <- clean_delay_data(data, "Secondary or tertiary care (public)")
+
+# Combine
+delay_combined <- bind_rows(delay_primary, delay_secondary)
+
+# Summarise for plotting
+delay_summary <- delay_combined %>%
+  group_by(Pathway_group, delay_stage) %>%
+  summarise(
+    mean = mean(delay_days, na.rm = TRUE),
+    ci_low = mean - 1.96 * sd(delay_days, na.rm = TRUE) / sqrt(n()),
+    ci_high = mean + 1.96 * sd(delay_days, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+# Plot
+ggplot(delay_summary, aes(x = delay_stage, y = mean, fill = Pathway_group)) +
+  geom_col(position = position_dodge(width = 0.7), width = 0.6) +
+  geom_errorbar(aes(ymin = pmax(ci_low, 0), ymax = ci_high),
+                position = position_dodge(width = 0.7),
+                width = 0.2) +
+  labs(
+    title = "Mean Time Delays by Referral Pathway",
+    x = "Delay Stage",
+    y = "Mean Delay (days)",
+    fill = "Referral Pathway"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    legend.position = "bottom"
+  )
+
+### Plot with the data after cleaning and deleting illogical values
+delay_summary_all <- delay_combined %>%
+  group_by(delay_stage) %>%
+  summarise(
+    mean = mean(delay_days, na.rm = TRUE),
+    ci_low = mean - 1.96 * sd(delay_days, na.rm = TRUE) / sqrt(n()),
+    ci_high = mean + 1.96 * sd(delay_days, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+###
+
+ggplot() +
+  # Jittered individual points
+  geom_jitter(
+    data = delay_combined,
+    aes(x = delay_stage, y = delay_days),
+    width = 0.2, alpha = 0.4, size = 1.2, color = "grey40"
+  ) +
+  # Mean points
+  geom_point(
+    data = delay_summary_all,
+    aes(x = delay_stage, y = mean),
+    size = 3, color = "blue"
+  ) +
+  # Error bars
+  geom_errorbar(
+    data = delay_summary_all,
+    aes(x = delay_stage, ymin = pmax(ci_low, 0), ymax = ci_high),
+    width = 0.2, color = "blue"
+  ) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Time Delays in Care Pathway (Overall Population)",
+    x = "Delay Stage",
+    y = "Delay in Days"
+  ) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
+
+
+# Scatterplot with jitter for visibility + mean and CI
+ggplot() +
+  # Jittered individual points
+  geom_jitter(
+    data = delay_combined,
+    aes(x = delay_stage, y = delay_days, color = Pathway_group),
+    width = 0.2, alpha = 0.4, size = 1.2
+  ) +
+  # Mean points
+  geom_point(
+    data = delay_summary,
+    aes(x = delay_stage, y = mean, color = Pathway_group),
+    position = position_dodge(width = 0.6),
+    size = 3
+  ) +
+  # Error bars
+  geom_errorbar(
+    data = delay_summary,
+    aes(
+      x = delay_stage,
+      ymin = pmax(ci_low, 0),
+      ymax = ci_high,
+      color = Pathway_group
+    ),
+    position = position_dodge(width = 0.6),
+    width = 0.2
+  ) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Time Delays in Care Pathway by Referral Source",
+    x = "Delay Stage",
+    y = "Delay in Days",
+    color = "Referral Pathway"
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    legend.position = "bottom"
+  )
+
+### Calculate time to delay by residency
+
+
+# Split the data into two groups based on Residency
+group1_data <- data %>% filter(Residency_group == "Urban/City")
+group2_data <- data %>% filter(Residency == "Rural/Town")
+
+
+#######################################
+# For subgroups by residency
+# Cleaned datasets
+# Keep original groupings
+group1_data <- data %>% filter(Residency_group == "Urban/City")
+group2_data <- data %>% filter(Residency_group == "Rural/Town")
+
+
+# Apply function
+group1_clean <- clean_time_delays(group1_data) %>% mutate(Group = "Urban/City")
+group2_clean <- clean_time_delays(group2_data) %>% mutate(Group = "Rural/Town")
+
+# Combine and summarise
+all_cleaned <- bind_rows(group1_clean, group2_clean)
+
+summary_stats <- all_cleaned %>%
+  pivot_longer(cols = starts_with("Time"), names_to = "Outcome", values_to = "Days") %>%
+  group_by(Group, Outcome) %>%
+  summarise(
+    N = n(),
+    Mean = round(mean(Days, na.rm = TRUE), 1),
+    Median = round(median(Days, na.rm = TRUE), 1),
+    SD = round(sd(Days, na.rm = TRUE), 1),
+    IQR = round(IQR(Days, na.rm = TRUE), 1),
+    .groups = "drop"
+  )
+
+print(summary_stats)
+
+# Plot all outcomes
+ggplot(summary_stats, aes(x = Outcome, y = Median, fill = Group)) +
+  geom_col(position = "dodge") +
+  geom_errorbar(aes(ymin = Median - IQR / 2, ymax = Median + IQR / 2),
+                width = 0.2, position = position_dodge(width = 0.9)) +
+  labs(title = "Time Delays in Care Pathway by Residency Group",
+       y = "Days (Median with IQR)", x = "Delay Type") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set1")
