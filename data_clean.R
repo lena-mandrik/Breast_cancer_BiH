@@ -109,7 +109,7 @@ data <- data %>%
   mutate(
     Screen_or_sympt = case_when(
       Screen_or_sympt %in% c("Screen: Self examination", "Screen: self-examination", "Screen: Self-examination", "Screen: self examination", "Symptomatic") ~ "Symptomatic",
-      Screen_or_sympt %in% c("Screen: Mammography", "Screen: mammography") ~ "Screen mammogrpahy",
+      Screen_or_sympt %in% c("Screen: Mammography", "Screen: mammography") ~ "Screen mammography",
       TRUE ~ Screen_or_sympt
     )
   )
