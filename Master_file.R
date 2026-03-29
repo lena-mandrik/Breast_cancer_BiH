@@ -15,7 +15,7 @@ library(forcats)
 ##################################################################
 ## Load the data
 ##################################################################
-data <- read_excel("dataset.xlsx", skip=3)
+data <- read_excel("Named_dataset.xlsx", skip=3)
 # Find the position of the column "Palliative"
 col_pos <- which(names(data) == "Palliative")
 # Keep only columns up to "Palliative" because there was no data on Palliative care

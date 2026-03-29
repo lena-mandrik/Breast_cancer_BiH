@@ -1,3 +1,30 @@
+for (var in names(data)) {
+
+  x <- data[[var]]
+
+  # Skip if all NA
+  if (all(is.na(x))) next
+
+  # Numeric variables → histogram
+  if (is.numeric(x)) {
+    hist(x,
+         main = paste("Histogram of", var),
+         xlab = var)
+
+    # Categorical variables → barplot
+  } else {
+    barplot(table(x),
+            main = paste("Barplot of", var),
+            xlab = var)
+  }
+
+  # Pause between plots (optional)
+  readline(prompt = "Press [enter] to continue")
+}
+
+
+
+## estimate missing
 col_missing <- colSums(is.na(data))
 missing_prop <- colSums(is.na(data)) / nrow(data)
 
@@ -33,6 +60,77 @@ for (g in 1:4) {
 
   print(p)
 }
+
+# Replacement of missing values
+var_no_replace <- c("N", "Year_birth", "Residency", "Canton", "Date_1st_sympt", "Date_1st_refer", "Date_GP_ref_CCUoS", "Pathway_refer",
+                    "Screen_or_sympt", "Date_1st_admission", "MM1st_date_req", "MM1st_date_cond", "US1st_date_req", "US1st_date_cond",
+                    "MM1st_positivity", "US1st_positivity", "MRI1st_date_req", "MRI1st_date_cond", "MRI1st_positivity",
+                    "Biopsy1st_date_req", "Biopsy1st_date_cond", "Biopsy_type", "Biopsy_date_result", "Biopsy1st_positivity",
+                    "Xray1st_date_req", "Xray1st_date_cond", "Xray1st_positivity", "CT1st_date_req", "CT1st_date_cond", "CT1st_positivity",
+                    "Diagnosis", "Date_diagnosis", "Year_diagnosis", "Stage_diagnosis", "Relapse_date", "Relapse_stage",
+                    "Date_surgery_request", "Date_surgery", "Type_surgery", "Date_chemo_request", "Type_chemo",
+                    "N_chemo_cycl_prescr", "N_chemo_cycl_received", "Date_1st_chemo_cycle", "Date_last_chemo_cycle",
+                    "Date_radio_request", "N_radio_cycl_prescr", "N_radio_cycl_received", "Date_1st_radio_cycle", "Date_last_radio_cycle",
+                    "Date_hormon_prescr", "Duration_hormon", "Hormon_free", "Date_target_prescr", "Duration_target", "N_target_received",
+                    "N_target_paid", "Date_last_visit", "Date_visit_b_last", "Last_status", "Died")
+
+# if  "Date_surgery_request", "Date_surgery", "Type_surgery" missing,  - no surgery was done
+data$had_surgery <- as.integer(
+  !is.na(data$Date_surgery_request) |
+    !is.na(data$Date_surgery) |
+    (!is.na(data$Type_surgery) & data$Type_surgery != "")
+)
+
+# if "Date_chemo_request", "Type_chemo", "N_chemo_cycl_prescr", "N_chemo_cycl_received" "Date_1st_chemo_cycle",
+# "Date_last_chemo_cycle" missing - no chemo done
+data$had_chemo <- as.integer(
+  !is.na(data$Date_chemo_request) |
+    (!is.na(data$Type_chemo) & data$Type_chemo != "") |
+    (!is.na(data$N_chemo_cycl_prescr) & data$N_chemo_cycl_prescr != 0) |
+    (!is.na(data$N_chemo_cycl_received) & data$N_chemo_cycl_received != 0)|
+    !is.na(data$Date_1st_chemo_cycle)|
+    !is.na(data$Date_last_chemo_cycle)
+)
+
+# if  "Date_radio_request", "N_radio_cycl_prescr", "N_radio_cycl_received", "Date_1st_radio_cycle", "Date_last_radio_cycle" missing - no radio was done
+data$had_radio <- as.integer(
+  !is.na(data$Date_radio_request) |
+    (!is.na(data$N_radio_cycl_prescr) & data$N_radio_cycl_prescr != 0) |
+    (!is.na(data$N_radio_cycl_received) & data$N_radio_cycl_received != 0) |
+    !is.na(data$Date_1st_radio_cycle) |
+    !is.na(data$Date_last_radio_cycle)
+)
+
+# if "Date_hormon_prescr", "Duration_hormon", "Hormon_free", "Date_target_prescr" is missing  - no hrmon was prescribed
+data$had_hormon <- as.integer(
+  !is.na(data$Date_hormon_prescr)|
+    (!is.na(data$Duration_hormon) & data$Duration_hormon != "") |
+    (!is.na(data$Hormon_free) & data$Hormon_free != "") |
+    (!is.na(data$Duration_target) & data$Duration_target != 0))
+
+#if "Date_target_prescr", "Duration_target"  "N_target_received"   "N_target_paid"
+data$had_target <- as.integer(
+  !is.na(data$Date_target_prescr)|
+    (!is.na(data$Duration_target) & data$Duration_target != "") |
+    (!is.na(data$N_target_received) & data$N_target_received != "") |
+    (!is.na(data$N_target_paid) & data$N_target_paid != 0))
+
+# replace missing with "0"
+cols <- c("N_repeat_MM","N_repeat_US","N_repeat_MRI",
+          "N_repeat_biopsy","N_repeat_Xray","N_repeat_CT","N_repeat_other")
+
+data[cols] <- lapply(data[cols], function(x) {
+  x[is.na(x)] <- 0
+  x
+})
+
+# replace missing with "No"
+cols <- c("Terminal")
+data[cols] <- lapply(data[cols], function(x) replace(x, is.na(x), "No"))
+
+# replace missing with "New"
+cols <- c("Relapsed")
+data[cols] <- lapply(data[cols], function(x) replace(x, is.na(x), "New"))
 
 #########################################################################
 ## Check formatting

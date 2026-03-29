@@ -9,21 +9,16 @@ Survival <- data %>%
     Date_death = as.Date(Date_death),
     Date_last_visit = as.Date(Date_last_visit),
 
-    # Define event status: 1 = death, 0 = censored
     Status_dead = ifelse(!is.na(Date_death), 1, 0),
 
-    # Define event or censoring date
-    Date_event = ifelse(Status_dead == 1, Date_death, Date_last_visit),
-    Date_event = as.Date(Date_event, origin = "1970-01-01"),  # Just in case
+    # Pick Date_death if present, otherwise Date_last_visit
+    Date_event = coalesce(Date_death, Date_last_visit),
 
-    # Time-to-event in days
     Time_days = as.numeric(Date_event - Date_diagnosis),
 
-    # filter cohort (diagnosed 2019–2022)
     Year_dx = as.numeric(format(Date_diagnosis, "%Y"))
   ) %>%
   filter(Year_dx >= 2019 & Year_dx <= 2022)
-
 
 km_fit <- survfit(Surv(Time_days, Status_dead) ~ 1, data = Survival)
 
@@ -44,32 +39,25 @@ ggsurvplot(
 # To calculate progression free survival
 
 PFS <- data %>%
-  ## 1.  Ensure all date variables are true Date objects
   mutate(
-    Date_diagnosis   = as.Date(Date_diagnosis),
-    Date_last_visit  = as.Date(Date_last_visit),
-    Date_death       = as.Date(Date_death)     # keep: needed for cancer deaths
-  ) %>%
+    Date_diagnosis = as.Date(Date_diagnosis),
+    Date_last_visit = as.Date(Date_last_visit),
+    Date_death = as.Date(Date_death),
 
-  ## 2.  Define the PFS event (1 = progressed / relapsed / metastatic OR died of cancer)
-  mutate(
     Event_PFS = case_when(
       Last_status == "Relapse/progressed/metastatic" ~ 1,
-      Last_status == "Dead"                          ~ 1,  # death from any cause
+      Last_status == "Dead"                          ~ 1,
       TRUE                                           ~ 0
     ),
 
-    ## 3.  Date of event or censoring
-    Date_event_PFS = case_when(
-      Last_status == "Relapse/progressed/metastatic" ~ Date_last_visit,
-      Last_status == "Dead" & !is.na(Date_death)     ~ Date_death,
-      TRUE                                            ~ Date_last_visit
+    Date_event_PFS = coalesce(
+      if_else(Last_status == "Relapse/progressed/metastatic", Date_last_visit, NA_Date_),
+      if_else(Last_status == "Dead" & !is.na(Date_death), Date_death, NA_Date_),
+      Date_last_visit
     ),
 
-    ## 4.  Time from diagnosis to event/censor in days
     Time_PFS_days = as.numeric(Date_event_PFS - Date_diagnosis),
 
-    ## 5.  Keep only the 2019-2022 incident cohort
     Year_dx = as.numeric(format(Date_diagnosis, "%Y"))
   ) %>%
   filter(Year_dx >= 2019 & Year_dx <= 2022)
